@@ -13,4 +13,4 @@ che contengono i dati necessari per il download dei dati di un singolo mese rela
 una serie di container eseguirà il codice relativo al web-scraper, che si occuperà di eseguire il login sul sito MyTerna e di eseguire il download dei dati 
 relativi ai messaggi contenuti nella coda, per poi caricare i risultati nel database di EGO. 
 
-Dettagli aggiuntivi nella [documentazione](https://github.com/Nescio98o/MyTernaScraper/tree/main/docs)
+Dettagli aggiuntivi nella [documentazione](https://github.com/Nescio98/MyTernaScraper/tree/main/docs)
