@@ -1,0 +1,125 @@
+Description: This template deploys test task on Fargate
+Parameters:
+  EnvironmentName:
+    AllowedValues:
+      - prod
+      - staging
+    Type: String
+  ServiceName:
+    Type: String
+  AccountId:
+    Type: String
+  DefaultRegion:
+    Type: String
+  ImageName:
+    Type: String
+  ImageTag:
+    Type: String
+  DestinationBucket:
+    Type: String
+  DownloadPath:
+    Type: String
+    Default: /app
+Conditions:
+  EnableProdScheduleRule: !Equals [!Ref EnvironmentName, prod]
+Resources:
+  CloudWatchLogsGroup:
+    Properties:
+      LogGroupName: !Sub /fargate/${EnvironmentName}/my-terna-metering
+      RetentionInDays: 7
+    Type: AWS::Logs::LogGroup
+  TaskDefinition:
+    DependsOn:
+      - TaskRole
+      - CloudWatchLogsGroup
+    Properties:
+      ContainerDefinitions:
+        - Essential: true
+          Image: !Sub ${AccountId}.dkr.ecr.${DefaultRegion}.amazonaws.com/${ImageName}:${ImageTag}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref 'CloudWatchLogsGroup'
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: Fargate
+          Name: !Sub ${EnvironmentName}-my-terna-metering
+          Environment:
+            - Name: ENVIRONMENT
+              Value: !Sub ${EnvironmentName}
+            - Name: COMPANY
+              Value: ''
+            - Name: AWS_DEFAULT_REGION
+              Value: !Sub ${DefaultRegion}
+            - Name: DESTINATION_BUCKET
+              Value: !Sub ${DestinationBucket}
+            - Name: QUEUE_NAME
+              Value: ''
+            - Name: HISTORICAL
+              Value: False
+      Cpu: '2048'
+      Memory: '4096'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Family: !Sub ${EnvironmentName}-fargate-my-terna-metering
+      TaskRoleArn: !GetAtt 'TaskRole.Arn'
+      ExecutionRoleArn: !Sub arn:aws:iam::${AccountId}:role/ecsTaskExecutionRole
+    Type: AWS::ECS::TaskDefinition
+
+  TaskRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+                Service:
+                  - events.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceEventsRole
+      RoleName: !Sub ${EnvironmentName}-Fargate-my-terna-metering-Role
+    Type: AWS::IAM::Role
+
+  TaskPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub ${EnvironmentName}--Fargate-${ServiceName}-Policy
+      PolicyDocument:
+        Statement:
+          - Action: ssm:GetParameters
+            Effect: Allow
+            Resource: !Sub 'arn:aws:ssm:${DefaultRegion}:${AccountId}:parameter/*'
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+            Effect: Allow
+            Resource:
+              - !Sub "arn:aws:s3:::ego-metering-tso-${AccountId}-${DefaultRegion}/*"
+          - Action:
+              - s3:GetBucketLocation
+              - s3:ListBucket
+            Effect: Allow
+            Resource: !Sub 'arn:aws:s3:::${DestinationBucket}'
+          - Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueUrl
+              - sqs:GetQueueAttributes
+              - sqs:ListQueues
+            Effect: Allow
+            Resource: !Sub 'arn:aws:sqs:${DefaultRegion}:${AccountId}:*'
+      Roles:
+        - Ref: TaskRole
